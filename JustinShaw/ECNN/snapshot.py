@@ -14,3 +14,4 @@ class Snapshot():
 
     def __init__(self, model):
         '''Serializes a BioPython model into a Snapshot object'''
+        

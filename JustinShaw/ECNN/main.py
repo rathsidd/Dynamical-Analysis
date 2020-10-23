@@ -1,6 +1,7 @@
 """Run this file to start the model"""
 
 import pywt
+import snapshot
 
 class Model:
     '''
