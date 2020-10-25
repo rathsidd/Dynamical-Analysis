@@ -11,3 +11,6 @@ Review the various ways the model could be used and prepare for extension.
 
 ## PHASE 4: Create a GROMACS Extension
 Make an extension to the GROMACS MD software using the documentation found [here](http://manual.gromacs.org/current/dev-manual/index.html)
+
+# TODO:
+- make a master pdb file with constant timesteps
