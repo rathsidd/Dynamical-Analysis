@@ -1,7 +1,7 @@
 """Run this file to start the model"""
 
 import pywt
-import snapshot
+from .snapshot import Snapshot
 
 class Model:
     '''
@@ -15,10 +15,8 @@ class Model:
         '''Initializes the Model class.'''
 
         # Gather the timeseries data as a list of tuples of sin/cos phi/psy angles
-        self.data = range(2000)
-        batch_size = 4
-        assert((batch_size & (batch_size - 1) == 0) and batch_size != 0)
-        self.batch_size = batch_size
+        self.data = Snapshot().get
+        self.batch_size = 4
     
     
     def run(self):
@@ -45,8 +43,6 @@ class Model:
         fine_batch = self.data[start : start + self.batch_size]
         fine_dwt = self.dwt(fine_batch)
         coarse_batch_size = self.batch_size + 1
-        for batch in self.batch_size:
-            foo
         print(fine_batch)
 
     def dwt(self, data):
