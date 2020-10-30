@@ -4,10 +4,16 @@ import math
 import random
 
 from Bio.PDB import *
-from Bio.PDB.Structure import Structure
 from Bio.PDB.internal_coords import IC_Residue
+from Bio.PDB.Structure import Structure
 
 class Parser():
+    '''Parses the PDB files and extracts data into a BioPython structure object.
+    
+    #### Structure
+    Structure -> Model -> Residue (this is where the coordinates are)
+    
+    '''
 
     @staticmethod
     def get_data_from_files():
@@ -71,15 +77,14 @@ class Parser():
                             if psi:
                                 residue.xtra['sin(psi)'] = math.sin(psi)
                                 residue.xtra['cos(psi)'] = math.cos(psi)
-                            omega = residue.internal_coord.get_angle("omega")
-                            if omega:
-                                residue.xtra['sin(omega)'] = math.sin(omega)
-                                residue.xtra['cos(omega)'] = math.cos(omega)
-                            chi2 = residue.internal_coord.get_angle("chi2")
-                            if chi2:
-                                residue.xtra['sin(chi2)'] = math.sin(chi2)
-                                residue.xtra['cos(chi2)'] = math.cos(chi2)
+                            # UNCOMMENT THESE LINES TO ADD OMEGA AND CHI-2 COORDINATES
+                            # omega = residue.internal_coord.get_angle("omega")
+                            # if omega:
+                            #     residue.xtra['sin(omega)'] = math.sin(omega)
+                            #     residue.xtra['cos(omega)'] = math.cos(omega)
+                            # chi2 = residue.internal_coord.get_angle("chi2")
+                            # if chi2:
+                            #     residue.xtra['sin(chi2)'] = math.sin(chi2)
+                            #     residue.xtra['cos(chi2)'] = math.cos(chi2)
                     model.id = random.randint(0, 999999999999999)
                     structure.add(model)
-
-Parser.get_data_from_files()

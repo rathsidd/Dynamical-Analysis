@@ -1,7 +1,8 @@
 """Run this file to start the model"""
 
 import pywt
-from .snapshot import Snapshot
+from .parser import Parser
+from .batch_manager import BatchManager
 
 class Model:
     '''
@@ -15,14 +16,17 @@ class Model:
         '''Initializes the Model class.'''
 
         # Gather the timeseries data as a list of tuples of sin/cos phi/psy angles
-        self.data = Snapshot().get
-        self.batch_size = 4
-    
+        self.data = Parser.get_data_from_files()
+        self.batcher = BatchManager(self.data)
     
     def run(self):
         '''Run this method to start the program.'''
-        # get the first batch_size items and perfrom dwt on fine data
-        fine_data = self._get_next_batch()
+        model_is_running = True
+        while model_is_running:
+            fine_data, coarse_data = self.batcher.next_batch()
+            fine_dwt = dwt(fine_data)
+            coarse_dwt = dwt(coarse_data)
+            
 
     def _get_next_batch(self, start):
         '''Pulls the next batch from data and returns 
@@ -42,7 +46,6 @@ class Model:
         # Pull batch_size elements from the end of list for fine-scale dwt
         fine_batch = self.data[start : start + self.batch_size]
         fine_dwt = self.dwt(fine_batch)
-        coarse_batch_size = self.batch_size + 1
         print(fine_batch)
 
     def dwt(self, data):
