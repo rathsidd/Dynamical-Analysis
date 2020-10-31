@@ -11,3 +11,12 @@ Review the various ways the model could be used and prepare for extension.
 
 ## PHASE 4: Create a GROMACS Extension
 Make an extension to the GROMACS MD software using the documentation found [here](http://manual.gromacs.org/current/dev-manual/index.html)
+
+# Accelerating Backbone Dihedral Angles:
+- [SHIFTOR](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0003400#pone.0003400-Neal1)
+- [ANGLOR](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0003400)
+- [PRIDICTOR](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0003400#pone.0003400-Berjanskii1)
+- [DESTRUCT](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0003400#pone.0003400-Wood1)
+- [SPINE](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0003400#pone.0003400-Dor1)
+
+- For large PDBs exceeding their char limits use the [SloppyStructureBuilder](https://biopython.org/wiki/Reading_large_PDB_files)

@@ -16,10 +16,14 @@ class Parser():
     '''
 
     @staticmethod
-    def get_data_from_files():
+    def get_data_from_files(verbose=False):
         '''
         Parses data from all PDB files and returns BioPython structure object containing
         all the data with constant times between frames.
+
+        Parameters
+        ----------
+        `verbose` - whether to show print statements
         
         Returns
         -------
@@ -45,13 +49,14 @@ class Parser():
 
         # Create one main structure to append all the models to.
         main_structure = Structure('WT-GrBP5')
-        Parser._parse_pdb_files(fast_trajectories, main_structure, keep_all_models=False)
-        Parser._parse_pdb_files(slow_trajectories, main_structure)
+        Parser._parse_pdb_files([pdb_01], main_structure, keep_all_models=False, verbose=verbose)
+        # Parser._parse_pdb_files(fast_trajectories, main_structure, keep_all_models=False, verbose=verbose)
+        # Parser._parse_pdb_files(slow_trajectories, main_structure, verbose=verbose)
         
         return main_structure
 
     @staticmethod
-    def _parse_pdb_files(pdb_paths, structure, keep_all_models=True):
+    def _parse_pdb_files(pdb_paths, structure, keep_all_models=True, verbose=False):
         '''
         Extracts pdb data from the given list of files and appends it to the give structure.
         
@@ -60,10 +65,13 @@ class Parser():
         `files` - a list of string paths representing the location of PDB files.
         `structure` - a PDB structure object to append new models to.
         `keep_all_models` - flags whether or not to keep all models (defualt) or skip odd models
+        `verbose` - whether to show print statements or not
         '''
         parser = PDBParser(QUIET=True)
         for path in pdb_paths:
             models = parser.get_structure('WT-GrBP5', path)
+            if verbose:
+                print(f'Starting to parse file: {path}')
             for model in models:
                 if keep_all_models or model.id % 2 == 0:
                     model.atom_to_internal_coordinates()
