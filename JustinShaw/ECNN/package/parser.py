@@ -16,21 +16,21 @@ class Parser():
     '''
 
     @staticmethod
-    def get_data_from_files(verbose=False):
+    def get_structure_from_files(verbose=False, test_mode=False):
         '''
-        Parses data from all PDB files and returns BioPython structure object containing
+        Parses data from a list of PDB files and returns a BioPython structure object containing
         all the data with constant times between frames.
 
         Parameters
         ----------
-        `verbose` - whether to show print statements
+        `verbose` - whether to show print statements.
         
         Returns
         -------
         `Structure` - Represents a macromolecular structure using the BioPython object notation.
 
         '''
-        # Our data is broken down into 11 files.
+        # Our data is composed of 11 smaller files.
         pdb_01 = "PDB/WT-GrBP5/WT_295K_200ns_50ps_0_run.pdb"
         pdb_02 = "PDB/WT-GrBP5/WT_295K_500ns_50ps_1_run.pdb"
         pdb_03 = "PDB/WT-GrBP5/WT_295K_500ns_50ps_2_run.pdb"
@@ -47,52 +47,68 @@ class Parser():
         fast_trajectories = [pdb_01, pdb_02, pdb_03, pdb_04, pdb_05, pdb_06]
         slow_trajectories = [pdb_07, pdb_08, pdb_09, pdb_10, pdb_11]
 
-        # Create one main structure to append all the models to.
+        # Create a single 'main' structure to append all the models to.
         main_structure = Structure('WT-GrBP5')
-        Parser._parse_pdb_files([pdb_01], main_structure, keep_all_models=False, verbose=verbose)
-        # Parser._parse_pdb_files(fast_trajectories, main_structure, keep_all_models=False, verbose=verbose)
-        # Parser._parse_pdb_files(slow_trajectories, main_structure, verbose=verbose)
+        if test_mode:
+            Parser._parse_pdb_files([pdb_01], main_structure, keep_all_models=False, verbose=verbose)
+        else:
+            Parser._parse_pdb_files(fast_trajectories, main_structure, keep_all_models=False, verbose=verbose)
+            Parser._parse_pdb_files(slow_trajectories, main_structure, keep_all_models=True, verbose=verbose)
         
         return main_structure
 
     @staticmethod
     def _parse_pdb_files(pdb_paths, structure, keep_all_models=True, verbose=False):
         '''
-        Extracts pdb data from the given list of files and appends it to the give structure.
+        Extracts pdb data from the given list of files and appends it to the given structure.
         
         Parameters
         ----------
-        `files` - a list of string paths representing the location of PDB files.
+        `pdb_paths` - a list of string paths representing the location of PDB files.
         `structure` - a PDB structure object to append new models to.
-        `keep_all_models` - flags whether or not to keep all models (defualt) or skip odd models
-        `verbose` - whether to show print statements or not
+        `keep_all_models` - flags whether or not to keep all models (defualt) or skip odd models.
+        `verbose` - whether to show print statements.
         '''
+        # Loop through the list of files and parse them into structures.
         parser = PDBParser(QUIET=True)
         for path in pdb_paths:
-            models = parser.get_structure('WT-GrBP5', path)
             if verbose:
                 print(f'Starting to parse file: {path}')
+            models = parser.get_structure('WT-GrBP5', path) # parse structure out of the file
             for model in models:
                 if keep_all_models or model.id % 2 == 0:
-                    model.atom_to_internal_coordinates()
-                    for residue in model.get_residues():
-                        if residue.internal_coord:
-                            phi = residue.internal_coord.get_angle("phi")
-                            if phi:
-                                residue.xtra['sin(phi)'] = math.sin(phi)
-                                residue.xtra['cos(phi)'] = math.cos(phi)
-                            psi = residue.internal_coord.get_angle("psi")
-                            if psi:
-                                residue.xtra['sin(psi)'] = math.sin(psi)
-                                residue.xtra['cos(psi)'] = math.cos(psi)
-                            # UNCOMMENT THESE LINES TO ADD OMEGA AND CHI-2 COORDINATES
-                            # omega = residue.internal_coord.get_angle("omega")
-                            # if omega:
-                            #     residue.xtra['sin(omega)'] = math.sin(omega)
-                            #     residue.xtra['cos(omega)'] = math.cos(omega)
-                            # chi2 = residue.internal_coord.get_angle("chi2")
-                            # if chi2:
-                            #     residue.xtra['sin(chi2)'] = math.sin(chi2)
-                            #     residue.xtra['cos(chi2)'] = math.cos(chi2)
-                    model.id = random.randint(0, 999999999999999)
+                    Parser._add_internal_coords_to_model(model) # add internal angles to model
+                    model.id = random.randint(0, 999999999999999) # randomize id to avoid collisions
                     structure.add(model)
+    
+    @staticmethod
+    def _add_internal_coords_to_model(model, enhanced_data=False):
+        '''Adds internal coordinates to the given model.
+        
+        Parameters
+        ----------
+        `model` - the model to add internal coordinates to.
+        `enhanced_data` - adds chi2 and omega angles to the model if true.
+        '''
+        model.atom_to_internal_coordinates() # calculates internal angles for the model
+        for residue in model.get_residues():
+            if residue.internal_coord: # check to make sure internal coords exist
+                Parser._add_angle_to_residue('phi', residue)
+                Parser._add_angle_to_residue('psi', residue)
+                if enhanced_data:
+                    Parser._add_angle_to_residue('omega', residue)
+                    Parser._add_angle_to_residue('chi2', residue)
+
+    @staticmethod
+    def _add_angle_to_residue(angle, residue):
+        '''Adds the sine and cosine of the given angle to the residue's xtra dict.
+        
+        Parameters
+        ----------
+        `angle` - the name of the angle to add
+        `residue` - the residue object to add the angle too.
+        '''
+        internal_angle = residue.internal_coord.get_angle(angle)
+        if internal_angle:
+            residue.xtra[f'sin({angle})'] = math.sin(internal_angle)
+            residue.xtra[f'cos({angle})'] = math.cos(internal_angle)

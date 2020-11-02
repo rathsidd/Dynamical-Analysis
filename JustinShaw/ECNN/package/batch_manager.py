@@ -1,123 +1,161 @@
-'''Generator that iterates and returns the next data for each batch.'''
+'''Formats Biopython's Structure object as keras-compatable dataset.'''
 
 import numpy as np
+import pywt
 
 class BatchManager():
 
     def __init__(self, data, wavelet_size=4, verbose=False):
-        '''Initialize the BatchManager class.
+        '''Manages a moving window over the dataset based on the given wavelet size.
         
-        This class manages a moving window over the given data based on the given wavelet size, and 
+        Parameters
+        ----------
+        `data` - the biopython Structure object.
+        `wavelet_size` - the input size to the dwt (must be power of two, defaults to 4)
+        `verbose` - whether to display print statements.
         '''
         super().__init__()
         if verbose:
             print('Initializing Batch Manager...')
         self.data = data
-        self.index = 0
-        self.num_angles = 44 # WTF
-        self.size = wavelet_size # this should be a power of two
+        self.index = 0 # the left edge of the moving window
+        self.num_angles = 44 # TODO: WTF is going on here????
         self.window_size = wavelet_size + wavelet_size * (wavelet_size + 1)
-
-    def next(self):
-        '''Returns a tuple of the next `fine_data`, `coarse_data`, and `output_data`.'''
-        fine_data, coarse_data = self._next_input()
-        output_data = self._next_output()
-        self.index += 1
-        yield fine_data, coarse_data, output_data
-    
-    def _next_output(self):
-        '''Returns a tuple of the next (default 5) data models.
-
-        Returns
-        -------
-        The future data is returned first as a list of (default 5) raw elements.
-
-        For example, this method might return:
-        >>> ([model_1], [model_2], [model_3], [model_4], [model_5])
-        where each model is a list that contains data, for example `model_5` might be:
-        >>> [sin(phi_1), cos(phi_1), sin(psi_1), cos(psi_1), sin(phi_2), cos(phi_2), ... , cos(psi_n)]
-        '''
-        try:
-            if len(self.data) - self.index >= self.window_size + self.size + 1:
-                y_train = self._get_output_data()
-                return y_train
-        except:
-            raise StopIteration
-    
-    def _next_input(self):
-        '''Returns a tuple of fine and coarse data.
         
-        Returns
-        -------
-        The fine data is returned first as a list of (default 4) raw elements.
-        The coarse data is returned second as a list of (default 4) averages of (default 5) elements.
-        
-        For example, this method might return:
-        >>> ([model_1], [model_2], [model_3], [model_4]), ([avg_5], [avg_6], [avg_7], [avg_8])
-        where each model is a list that contains data, for example `model_4` might be:
-        >>> [sin(phi_1), cos(phi_1), sin(psi_1), cos(psi_1), sin(phi_2), cos(phi_2), ... , cos(psi_n)]
-        '''
-        try:
-            if len(self.data) - self.index >= self.window_size:
-                fine_data = self._get_fine_data()
-                coarse_data = self._get_coarse_data()
-                return fine_data, coarse_data
-        except:
-            raise StopIteration
+        # Check that the wavelet size is a power of two.
+        if (wavelet_size & (wavelet_size - 1) == 0) and wavelet_size != 0:
+            self.size = wavelet_size
+        else:
+            raise ValueError('wavelet_size must be a power of two!')
 
-    def _get_output_data(self):
-        '''Returns a tuple of length `size + 1` with elements that are themselves lists of sin/cos phi/psi angles.'''
+    def get_clean_dataset(self):
+        '''Returns a cleaned dataset.'''
+        X = []
+        Y = []
+        # Converts model-first data to residue-first data
+        data_generator = self._next_window()
+        for fine_data, coarse_data, output_data in data_generator:
+            # Temporary storage for the DWT of the model-first data.
+            fine_dwts = []
+            coarse_dwts = []
+            outputs = []
+
+            # Convert data from model-first to angle-first grouping, then DWT the heck out of it.
+            for grouped_fine_data in self._to_inverted_list(fine_data):
+                fine_dwts.append(self.dwt(grouped_fine_data))
+            for grouped_coarse_data in self._to_inverted_list(coarse_data):
+                coarse_dwts.append(self.dwt(grouped_coarse_data))
+            for grouped_output_data in self._to_inverted_list(output_data):
+                outputs.append(np.array(grouped_output_data))
+            
+            # Loop over the number of phi/psi angles and add contents to X and Y.
+            for i, fine_dwt in enumerate(fine_dwts):
+                if len(X) == i: # create a new sublist to contain new inputs
+                    X.append([])
+                if len(Y) == i: # create a new sublist to contain new outputs
+                    Y.append([])
+                X[i].append(np.append(fine_dwt, coarse_dwts[i]))
+                Y[i].append(np.array(outputs[i]))
+        return np.array(X), np.array(Y)
+
+    def _next_window(self):
+        '''Generates the next `fine_data`, `coarse_data`, and `output_data` on the fly.
+        
+        ### Example:
+        ```python
+        >>> batch = BatchManager(data)
+        >>> fine, coarse, output = batch.next()
+        >>> fine # Returns a tuple of lists (wavelet_size)
+        ([model_1], [model_2], [model_3], [model_4])
+        >>> coarse # Returns a tuple of (wavelet_size) lists
+        ([avg_1], [avg_2], [avg_3], [avg_4])
+        >>> output # Returns a tuple of (wavelet_size + 1) lists
+        ([model_1], [model_2], [model_3], [model_4], [model_5])
+        >>> fine[0] # Returns a list of sin/cos phi/psi angles
+        [sin(phi_1), cos(phi_1), sin(psi_1), cos(psi_1), sin(phi_2), cos(phi_2), ... , cos(psi_n)]
+        >>> coarse[0] # Returns a list of the average of (wavelet_size + 1) sin/cos phi/psi angles
+        [sin(phi_1), cos(phi_1), sin(psi_1), cos(psi_1), sin(phi_2), cos(phi_2), ... , cos(psi_n)]
+        >>> output[0] # Returns a list of sin/cos phi/psi angles
+        [sin(phi_1), cos(phi_1), sin(psi_1), cos(psi_1), sin(phi_2), cos(phi_2), ... , cos(psi_n)]
+        ```
+        '''
+        # Yeild the next batch, but first check to make sure you're not out of data.
+        while len(self.data) - self.index >= self.window_size + self.size + 1:
+            try:
+                # Define the range (slice) of data to take in the moving window.
+                fine_slice = slice(self.index + self.window_size - self.size, self.index + self.window_size)
+                coarse_slice = slice(self.index, self.index + self.window_size - self.size)
+                output_slice = slice(self.index + self.window_size, self.index + self.window_size + self.size + 1)
+
+                # Slice the data with the given slicing range.
+                fine_data = self._slice_data(fine_slice)
+                coarse_data = self._slice_data(coarse_slice, take_average=True)
+                output_data = self._slice_data(output_slice)
+
+                # Increment the moving window and return.
+                self.index += 1
+                yield fine_data, coarse_data, output_data
+            except:
+                raise StopIteration
+
+    def _slice_data(self, data_slice, take_average=False):
+        '''Returns a tuple of the list of angles in the given slice of the data.
+        
+        Parameters
+        ----------
+        `data_slice` - the slice of the data to parse.
+        `take_average` - takes the average of the tuple if true (default false)
+        '''
         result = ()
-        models = self.data.child_list[self.index + self.window_size : self.index + self.window_size + self.size + 1]
+        models = self.data.child_list[data_slice]
         for model in models:
             angles = self._get_angles_from_model(model)
             result += tuple([angles])
+        if take_average:
+            result = self._take_average_of_tuple(result)
         return result
 
-    def _get_fine_data(self):
-        '''Returns a tuple of length `size` with elements that are themselves lists of sin/cos phi/psi angles.'''
-        result = ()
-        models = self.data.child_list[self.index + self.window_size - self.size : self.index + self.window_size]
-        for model in models:
-            angles = self._get_angles_from_model(model)
-            result += tuple([angles])
-        return result
-
-    def _get_coarse_data(self):
-        '''Returns a tuple of length `size` with elements that are themselves lists of the average of sin/cos phi/psi angles.'''
-        result = ()
-        models = self.data.child_list[self.index : self.index + self.window_size - self.size]
-        for model in models:
-            angles = self._get_angles_from_model(model)
-            result += tuple([angles])
-        return self._take_average_of_tuple(result)
-
-    def _get_angles_from_model(self, model):
-        '''Returns a list of sin/cos phi/psi angles extracted from each model.'''
+    def _get_angles_from_model(self, model, enhance_data=False):
+        '''Returns a list of sin/cos phi/psi angles extracted from each model.
+        
+        Parameters
+        ----------
+        `model` - the model object to pull residues from.
+        `enhance_data` - adds omega and chi2 angles to the list if true (default False)
+        '''
         angles = []
         for residue in model.get_residues():
-            sin_phi = residue.xtra.get('sin(phi)')
-            cos_phi = residue.xtra.get('cos(phi)')
-            sin_psi = residue.xtra.get('sin(psi)')
-            cos_psi = residue.xtra.get('cos(psi)')
-            # sin_omega = residue.xtra.get('sin(omega)')
-            # cos_omega = residue.xtra.get('cos(omega)')
-            # sin_chi2 = residue.xtra.get('sin(chi2)')
-            # cos_chi2 = residue.xtra.get('cos(chi2)')
-            angles.append(sin_phi) if sin_phi is not None else None
-            angles.append(cos_phi) if cos_phi is not None else None
-            angles.append(sin_psi) if sin_psi is not None else None
-            angles.append(cos_psi) if cos_psi is not None else None
-            # angles.append(sin_omega) if sin_omega is not None else None
-            # angles.append(cos_omega) if cos_omega is not None else None
-            # angles.append(sin_chi2) if sin_chi2 is not None else None
-            # angles.append(cos_chi2) if cos_chi2 is not None else None
+            self._add_angles_from_residue('phi', residue, angles)
+            self._add_angles_from_residue('psi', residue, angles)
+            if enhance_data:
+                self._add_angles_from_residue('omega', residue, angles)
+                self._add_angles_from_residue('chi2', residue, angles)
         while len(angles) < self.num_angles:
             angles.append(0)
         return angles
+    
+    def _add_angles_from_residue(self, angle_name, residue, angles_list):
+        '''Appends the sin and cos of the given angle on the given residue to the angles list.
+        
+        Parameters
+        ----------
+        `angle_name` - the name of the angle to append.
+        `residue` - the residue object search the dict for.
+        `angles_list` - the array of angles to append.
+        '''
+        sin = residue.xtra.get(f'sin({angle_name})')
+        cos = residue.xtra.get(f'cos({angle_name})')
+        angles_list.append(sin) if sin is not None else None
+        angles_list.append(cos) if cos is not None else None
 
     def _take_average_of_tuple(self, data):
-        '''Takes an incoming tuple and computes the element-wise average of sets of lists, returning the result.'''
+        '''Takes an incoming tuple and computes the element-wise average of sets of lists, returning the result.
+        
+        Parameters
+        ----------
+        `data` - the large tuple of angle lists to condense.
+        '''
+        # Group the data into chunks of self.size (default 4)
         result = ()
         for i in range(self.size):
             list_of_lists = np.zeros(shape=(self.size + 1, len(data[0])))
@@ -129,3 +167,35 @@ class BatchManager():
             average = np.average(list_of_lists, axis=0)
             result += tuple([average])
         return result
+
+    def _to_inverted_list(self, data):
+        '''When given a tuple of lists, it returns an inverted list of lists.'''
+        result = []
+        for i in range(len(data)):
+            for j in range(len(data[i])):
+                if len(result) == j:
+                    result.append([])
+                result[j].append(data[i][j])
+        return result
+
+    def dwt(self, data):
+        """
+        This function performs a discrete wavelet transform on an array of 2^n
+        values, returning the result.
+
+        Exceptions
+        ----------
+        Raises a ValueError if the length of values is not a power of two.
+
+        Returns
+        -------
+        Returns the result of a harr wavelet transform on the input values.
+        """
+        # Use bit manipulations to check for power of two, for more information
+        # see here: https://stackoverflow.com/a/57025941
+        n = len(data)
+        if (n & (n - 1) == 0) and n != 0:
+            (cA, cD) = pywt.dwt(data, 'haar') # TODO Is this the right transform?
+            return np.append(cA, cD)
+        else:
+            raise ValueError('Data should contain a power of two number of elements')
