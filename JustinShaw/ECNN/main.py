@@ -13,14 +13,16 @@ class Model:
     '''
 
     def __init__(self):
-        structure = Parser.get_structure_from_files(verbose=True, test_mode=True)
-        batcher = BatchManager(structure, verbose=True)
+        verbose = True
+        test_mode = True
+        structure = Parser.get_structure_from_files(verbose=verbose, test_mode=test_mode)
+        batcher = BatchManager(structure, verbose=verbose)
         x, y = batcher.get_clean_dataset()
-        self.predictors = Predictors(x, y,  verbose=True)
+        self.predictors = Predictors(x, y,  verbose=verbose, test_mode=test_mode)
 
     def run(self):
         '''This method starts the program.'''
-        self.predictors.predict(test_mode=True)
+        self.predictors.predict()
 
 if __name__ == "__main__":
     model = Model()
